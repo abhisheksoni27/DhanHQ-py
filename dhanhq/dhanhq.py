@@ -49,6 +49,11 @@ class dhanhq:
     """Constants for Validity"""
     DAY = 'DAY'
     IOC = 'IOC'
+    
+    """Constants for Position Type"""
+    LONG = 'LONG'
+    SHORT = 'SHORT'
+    CLOSED = 'CLOSED'
 
     """CSV URL for Security ID List"""
     COMPACT_CSV_URL = 'https://images.dhan.co/api-data/api-scrip-master.csv'
@@ -1126,7 +1131,56 @@ class dhanhq:
                 'status': 'failure',
                 'remarks': str(e),
                 'data': '',
-            }
+            } 
+
+    def exit_all_positions(self):
+        try:
+            positions_response = self.get_positions()
+            if positions_response.get("status") != "success":
+                raise Exception("Failed to retrieve positions")
+
+            all_positions = positions_response.get("data", [])
+
+            if all_positions is None or len(all_positions) == 0:
+                raise Exception("No positions found")
+
+            for position in all_positions:
+                if position["positionType"] == dhanhq.CLOSED:
+                    continue
+
+                if position["exchangeSegment"] != dhanhq.NSE_FNO:
+                    continue
+                
+                trading_symbol = position["tradingSymbol"]
+                
+                print(f"closing position for {trading_symbol}")
+
+                result = self.place_order(
+                    security_id=position["securityId"],
+                    exchange_segment=position["exchangeSegment"],
+                    transaction_type=(
+                        dhanhq.BUY
+                        if position["positionType"] == dhanhq.LONG
+                        else dhanhq.SELL
+                    ),
+                    quantity=position["netQty"],
+                    order_type=dhanhq.MARKET,
+                    product_type=position["productType"],
+                    price=0,
+                )
+                
+                if result.get("status") != "success":
+                    raise Exception(f"failed to close position = {trading_symbol}")
+                
+                print(f"position closed for {trading_symbol}")
+
+        except Exception as e:
+            logging.error("Exception in dhanhq>>exit_all_positions: %s", e)
+            return {
+                'status': 'failure',
+                'remarks': str(e),
+                'data': '',
+            } 
 
     def convert_to_date_time(self, epoch):
         """
